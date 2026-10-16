@@ -1,27 +1,26 @@
-# Validation report
+# Validation notes
 
-Validation date: 2026-10-16
+## Fix applied for the “Patches 0” report
 
-## Completed
+- Added the Morphe-template `generatePatchesList` Gradle task and its dedicated Gson classpath.
+- Added `util.PatchListGeneratorKt`, which loads the generated `.mpp` using Morphe Patcher's `loadPatchesFromJar` API and serializes the actually discoverable patch metadata to root `patches-list.json`.
+- Updated GitHub Actions to clean old build products before the build, generate the patch list, and require exactly these two names before uploading anything:
+  - `Brave: Immersive status bar on hidden address bar`
+  - `Brave Beta: Immersive status bar on hidden address bar`
+- CI checks for exactly one `.mpp` artifact and uploads the artifact, metadata list, and SHA-256 checksum.
 
-- ZIP contents and archive integrity checked.
-- Java extension source compiled with `javac` against minimal Android API-shape stubs to catch Java syntax and type-use errors.
-- Kotlin patch source compiled with `kotlinc` against minimal Morphe API-shape stubs to catch Kotlin syntax and expected API-shape usage.
-- Static checks confirmed both Brave package IDs, the `ChromeTabbedActivity.onResume()V` hook, and extension bundle reference.
+## Checks performed in this environment
 
-## Not completed
+- Verified source paths align with Gradle's Kotlin source-set layout.
+- Verified both patch declarations are named, use the intended package names, and use the Morphe patch DSL.
+- Verified the workflow triggers on every branch push and `workflow_dispatch`.
+- Parsed workflow YAML and checked the patch-list guard logic.
+- Inspected the current Morphe template and Patcher documentation: the standard template generates `patches-list.json` from the compiled bundle, and `PatchLoader` discovers named patches from public static properties/getters.
 
-- No real Gradle build was possible: Gradle, Android SDK/`android.jar`, Morphe Gradle dependencies, and network access to the dependency registry were unavailable in the build container.
-- No `.mpp` bundle was produced.
-- No Brave/Brave Beta APK was patched and no on-device behavior test was performed.
+## Not performed
 
-The stub compilation is a source-level check only; it does not establish compatibility with the real Morphe plugin/dependency versions, DEX verifier, or Brave UI hierarchy.
+- A real Gradle build: Morphe GitHub Packages dependencies require registry access credentials which are not available in this environment.
+- Applying either patch to an actual Brave Stable or Brave Beta APK.
+- Runtime verification on Android hardware.
 
-
-## CI builder update (2026-10-16)
-
-- Added `.github/workflows/build.yml` with `push` (all branches) and `workflow_dispatch` triggers.
-- Uses the current Morphe template's Java 21 / Gradle 9.8.1 toolchain conventions and `:patches:buildAndroid` build task.
-- Performs a post-build check for one or more `.mpp` outputs, writes SHA-256 checksums, and uploads the files as a 14-day GitHub Actions artifact.
-- Static workflow/YAML structure and referenced file paths can be checked locally; this environment cannot run a GitHub-hosted workflow or authenticate to Morphe's package registry, so an actual remote CI build remains unverified until the workflow is run in the target repository.
-- Local static checks completed successfully for YAML parsing, the `push`/`workflow_dispatch` triggers, action references, Gradle build command, artifact paths, and alignment with `settings.gradle.kts` registry credential environment variables.
+The CI job now fails if the built bundle does not expose both patch entries. Once CI passes, download the fresh `.mpp` artifact and replace the previously imported local source in Morphe; an already imported `.mpp` remains unchanged until replaced.

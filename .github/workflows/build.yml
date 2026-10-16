@@ -10,9 +10,6 @@ permissions:
   contents: read
   packages: read
 
-# Keep the Gradle package-registry credentials available to settings.gradle.kts.
-# Add MORPHE_GITHUB_TOKEN (PAT with read:packages) in repository Actions secrets
-# if the automatic GITHUB_TOKEN cannot read the Morphe registry package.
 env:
   GITHUB_ACTOR: ${{ github.actor }}
   GITHUB_TOKEN: ${{ secrets.MORPHE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
@@ -23,7 +20,7 @@ concurrency:
 
 jobs:
   build:
-    name: Compile .mpp patch bundle
+    name: Build and verify Morphe patches
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -43,39 +40,56 @@ jobs:
           gradle-version: '9.8.1'
           cache-provider: basic
 
-      - name: Build Morphe patch bundle
+      - name: Remove stale build output
+        run: gradle clean --no-daemon --stacktrace
+
+      - name: Build Morphe .mpp bundle
         run: gradle :patches:buildAndroid --no-daemon --stacktrace
 
-      - name: Verify bundle and create checksum
+      - name: Generate template-compatible patch list
+        run: gradle :patches:generatePatchesList --no-daemon --stacktrace
+
+      - name: Verify both patches were discovered
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f patches-list.json || { echo '::error::patches-list.json was not generated'; exit 1; }
+          jq -e '
+            (.patches | length) == 2 and
+            ([.patches[].name] | sort) == [
+              "Brave Beta: Immersive status bar on hidden address bar",
+              "Brave: Immersive status bar on hidden address bar"
+            ]
+          ' patches-list.json >/dev/null || {
+            echo '::error::Expected both named Brave patches in patches-list.json; refusing to publish an empty/partial bundle.'
+            jq '{version, patchCount: (.patches | length), names: [.patches[].name]}' patches-list.json || true
+            exit 1
+          }
+          echo 'Verified both patch entries:'
+          jq -r '.patches[].name' patches-list.json
+
+      - name: Verify .mpp bundle and create checksum
         shell: bash
         run: |
           set -euo pipefail
           output_dir='patches/build/libs'
-          if [[ ! -d "$output_dir" ]]; then
-            echo "::error::Expected output directory '$output_dir' was not created."
-            exit 1
-          fi
-
           mapfile -t mpp_files < <(find "$output_dir" -maxdepth 1 -type f -name '*.mpp' -print | sort)
-          if (( ${#mpp_files[@]} == 0 )); then
-            echo "::error::The Gradle build completed without producing a .mpp bundle in $output_dir."
+          if (( ${#mpp_files[@]} != 1 )); then
+            echo "::error::Expected exactly one .mpp in $output_dir; found ${#mpp_files[@]}"
             find "$output_dir" -maxdepth 2 -type f -print || true
             exit 1
           fi
-
-          printf 'Verified Morphe patch bundle(s):\n'
-          printf ' - %s\n' "${mpp_files[@]}"
-          sha256sum "${mpp_files[@]}" > "$output_dir/SHA256SUMS.txt"
+          sha256sum "${mpp_files[0]}" > "$output_dir/SHA256SUMS.txt"
           cat "$output_dir/SHA256SUMS.txt"
 
-      - name: Upload .mpp bundle and checksum
+      - name: Upload verified bundle and source metadata
         uses: actions/upload-artifact@v7
         with:
           name: brave-immersive-statusbar-${{ github.sha }}
           path: |
             patches/build/libs/*.mpp
             patches/build/libs/SHA256SUMS.txt
+            patches-list.json
           if-no-files-found: error
           retention-days: 14
-          # .mpp bundles are already archive-like; avoid recompressing them.
           compression-level: 0
