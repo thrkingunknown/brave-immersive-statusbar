@@ -74,12 +74,13 @@ jobs:
           set -euo pipefail
           output_dir='patches/build/libs'
           mapfile -t mpp_files < <(find "$output_dir" -maxdepth 1 -type f -name '*.mpp' -print | sort)
-          if (( ${#mpp_files[@]} != 1 )); then
-            echo "::error::Expected exactly one .mpp in $output_dir; found ${#mpp_files[@]}"
+          mapfile -t bundle_files < <(printf '%s\n' "${mpp_files[@]}" | grep -Ev -- '-(sources|javadoc)\.mpp$' || true)
+          if (( ${#bundle_files[@]} != 1 )); then
+            echo "::error::Expected exactly one primary .mpp bundle in $output_dir; found ${#bundle_files[@]}"
             find "$output_dir" -maxdepth 2 -type f -print || true
             exit 1
           fi
-          sha256sum "${mpp_files[0]}" > "$output_dir/SHA256SUMS.txt"
+          sha256sum "${bundle_files[0]}" > "$output_dir/SHA256SUMS.txt"
           cat "$output_dir/SHA256SUMS.txt"
 
       - name: Upload verified bundle and source metadata

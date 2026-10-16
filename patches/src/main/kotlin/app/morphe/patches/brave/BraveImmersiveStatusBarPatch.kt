@@ -13,14 +13,12 @@ private val BRAVE_COMPATIBILITY = Compatibility(
     name = "Brave",
     packageName = "com.brave.browser",
     appIconColor = 0xFB542B,
-    targets = emptyList(), // Deliberately version-agnostic; the fingerprint is checked when patching.
 )
 
 private val BRAVE_BETA_COMPATIBILITY = Compatibility(
     name = "Brave Beta",
     packageName = "com.brave.browser_beta",
     appIconColor = 0xFB542B,
-    targets = emptyList(), // Deliberately version-agnostic; the fingerprint is checked when patching.
 )
 
 private fun immersiveStatusBarPatch(
