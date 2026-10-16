@@ -50,6 +50,11 @@ fun main() {
 
 @Suppress("DEPRECATION")
 private fun generatePatchList(version: String, patches: Set<Patch<*>>) {
+    check(patches.isNotEmpty()) {
+        "Morphe loaded zero named patches from the compiled .mpp. " +
+            "Ensure patch objects are exported as public JVM fields and rebuild the bundle."
+    }
+
     val listJson = File("../patches-list.json")
     val patchesMap = patches.sortedBy { it.name }.map { patch ->
         JsonPatch(

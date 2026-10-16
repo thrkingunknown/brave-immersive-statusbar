@@ -21,23 +21,26 @@ private val BRAVE_BETA_COMPATIBILITY = Compatibility(
     appIconColor = 0xFB542B,
 )
 
-private fun immersiveStatusBarPatch(
-    patchName: String,
-    compatibility: Compatibility,
-) = bytecodePatch(
-    name = patchName,
-    description = "Hides the Android status bar when Brave's address bar scrolls out of view, and restores it when the bar returns.",
+private const val CHROME_TABBED_ACTIVITY = "Lorg/chromium/chrome/browser/ChromeTabbedActivity;"
+
+/**
+ * Keep these patch values as explicit public JVM fields. Morphe's bundle loader discovers
+ * statically exposed patch objects from the compiled .mpp; Kotlin's default top-level `val`
+ * backing fields are private. @JvmField makes the patch objects unambiguously discoverable.
+ */
+@JvmField
+@Suppress("unused")
+val braveImmersiveStatusBarPatch = bytecodePatch(
+    name = "Brave: Immersive status bar on hidden address bar",
+    description = "Hides the Android status bar when Brave's address bar is hidden and restores it when the bar reappears.",
     default = true,
 ) {
-    compatibleWith(compatibility)
+    compatibleWith(BRAVE_COMPATIBILITY)
     extendWith("extensions/extension.mpe")
 
     execute {
-        // ChromeTabbedActivity.onResume() is a stable Chromium lifecycle entry point.
-        // Install after the activity is resumed; the extension posts installation to the decor view,
-        // so the toolbar hierarchy is available before it begins observation.
         val activityOnResumeFingerprint = Fingerprint(
-            definingClass = "Lorg/chromium/chrome/browser/ChromeTabbedActivity;",
+            definingClass = CHROME_TABBED_ACTIVITY,
             name = "onResume",
             returnType = "V",
             parameters = emptyList(),
@@ -50,14 +53,27 @@ private fun immersiveStatusBarPatch(
     }
 }
 
+@JvmField
 @Suppress("unused")
-val braveImmersiveStatusBarPatch = immersiveStatusBarPatch(
-    patchName = "Brave: Immersive status bar on hidden address bar",
-    compatibility = BRAVE_COMPATIBILITY,
-)
+val braveBetaImmersiveStatusBarPatch = bytecodePatch(
+    name = "Brave Beta: Immersive status bar on hidden address bar",
+    description = "Hides the Android status bar when Brave Beta's address bar is hidden and restores it when the bar reappears.",
+    default = true,
+) {
+    compatibleWith(BRAVE_BETA_COMPATIBILITY)
+    extendWith("extensions/extension.mpe")
 
-@Suppress("unused")
-val braveBetaImmersiveStatusBarPatch = immersiveStatusBarPatch(
-    patchName = "Brave Beta: Immersive status bar on hidden address bar",
-    compatibility = BRAVE_BETA_COMPATIBILITY,
-)
+    execute {
+        val activityOnResumeFingerprint = Fingerprint(
+            definingClass = CHROME_TABBED_ACTIVITY,
+            name = "onResume",
+            returnType = "V",
+            parameters = emptyList(),
+        )
+
+        activityOnResumeFingerprint.method.addInstructions(
+            0,
+            "invoke-static {p0}, Lapp/morphe/extension/BraveImmersiveStatusBar;->install(Landroid/app/Activity;)V",
+        )
+    }
+}

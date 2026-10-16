@@ -33,10 +33,10 @@ This is **source**, not a precompiled `.mpp` bundle. The `.mpp` artifact must be
 3. From this directory, run:
 
    ```bash
-   gradle buildAndroid
+   gradle clean :patches:buildAndroid :patches:generatePatchesList
    ```
 
-4. The official template build convention writes the patch bundle under `patches/build/libs/` with the `.mpp` extension. Import that `.mpp` in Morphe Manager/Desktop and patch a Brave APK of the matching package.
+4. The primary bundle is under `patches/build/libs/` with the `.mpp` extension. Import `patches-1.0.0.mpp` (not the `-sources` or `-javadoc` file) in Morphe Manager/Desktop. Remove the existing local source first so it does not keep using the older zero-patch bundle.
 
 ## GitHub Actions build
 
@@ -59,13 +59,13 @@ The workflow first uses the run's automatic `GITHUB_TOKEN`. If dependency resolu
 
 ## Fix for a source showing “Patches 0”
 
-The earlier source omitted Morphe's template-style `generatePatchesList` task, so it could produce an `.mpp` without validating that the bundle's named patches were discoverable. The build now runs that generator and asserts that both named Brave patches are present. If that assertion fails in GitHub Actions, the `.mpp` is not uploaded.
+The earlier source could emit a `.mpp` while Morphe Manager reported zero patches. Both named patch objects now use `@JvmField` so they are exposed as public JVM fields to bundle scanners. The template-style `generatePatchesList` task validates the actual compiled bundle and fails immediately if zero patches are discoverable; GitHub Actions then asserts that both expected Brave entries are present before uploading the `.mpp`.
 
 After the workflow succeeds, download the artifact and re-import the freshly built `.mpp`; removing/replacing the older local source is necessary because updating the project ZIP cannot change an already imported bundle.
 
 ## Validation status
 
-The patch list generator and CI guard are included and statically checked. This environment does not have the Morphe registry dependencies or a Brave APK available for a true Gradle build/application test. Therefore no claim is made that a newly built `.mpp` has passed runtime testing. The GitHub Actions job is designed to perform the first authoritative bundle-discovery check and fail closed if it detects zero or partial patches.
+The public-field patch declarations and generator's zero-patch failure are statically checked. This environment does not have the Morphe registry dependencies or a Brave APK available for a true Gradle build/application test. Therefore the corrected `.mpp` has not been runtime-verified here. The GitHub Actions job is configured to perform the first authoritative bundle-discovery check and fail closed if it detects zero or partial patches.
 
 ## License and naming
 
