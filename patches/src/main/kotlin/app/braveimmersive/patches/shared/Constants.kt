@@ -9,14 +9,14 @@ object Constants {
         name = "Brave",
         packageName = "com.brave.browser",
         apkFileType = ApkFileType.APK,
-        appIconColor = 0xFF5E35B1.toInt(),
+        appIconColor = 0x5E35B1,
         targets = listOf(AppTarget(version = null, isExperimental = true))
     )
     val BRAVE_BETA_COMPATIBILITY = Compatibility(
         name = "Brave Beta",
         packageName = "com.brave.browser_beta",
         apkFileType = ApkFileType.APK,
-        appIconColor = 0xFF5E35B1.toInt(),
+        appIconColor = 0x5E35B1,
         targets = listOf(AppTarget(version = null, isExperimental = true))
     )
 }
