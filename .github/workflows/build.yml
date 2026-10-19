@@ -11,6 +11,12 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Create repository Actions secrets GPR_USER and GPR_KEY.
+      # GPR_KEY must be a classic PAT with read:packages permission and access to
+      # MorpheApp/registry. GITHUB_TOKEN alone may not access another owner's package.
+      GPR_USER: ${{ secrets.GPR_USER }}
+      GPR_KEY: ${{ secrets.GPR_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -23,6 +29,15 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+
+      - name: Check Morphe registry credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GPR_USER:-}" || -z "${GPR_KEY:-}" ]]; then
+            echo "::error::Missing GPR_USER or GPR_KEY Actions secret. Add a GitHub classic PAT with read:packages access to MorpheApp/registry."
+            exit 1
+          fi
 
       - name: Verify runtime bridge source is present
         shell: bash

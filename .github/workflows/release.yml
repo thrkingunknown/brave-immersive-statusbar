@@ -13,6 +13,12 @@ jobs:
       id-token: write
       attestations: write
     runs-on: ubuntu-latest
+    env:
+      # Create repository Actions secrets GPR_USER and GPR_KEY.
+      # GPR_KEY must be a classic PAT with read:packages permission and access to
+      # MorpheApp/registry. GITHUB_TOKEN alone may not access another owner's package.
+      GPR_USER: ${{ secrets.GPR_USER }}
+      GPR_KEY: ${{ secrets.GPR_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
