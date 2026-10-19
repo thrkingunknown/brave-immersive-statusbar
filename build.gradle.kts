@@ -1,1 +1,1 @@
-// Root build configuration for morphe-patches-template
+// Root build configuration for Brave Immersive Status Bar Morphe patches.

@@ -1,46 +1,109 @@
-name: Build patch bundle
+name: Build and validate installable Morphe patch bundle
 
 on:
   push:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  packages: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GPR_USER: ${{ secrets.GPR_USER }}
+      GPR_KEY: ${{ secrets.GPR_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
       - name: Ensure Gradle wrapper is executable
         run: chmod +x ./gradlew
+
       - name: Set up Java 21
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
-      - name: Build Morphe patch bundle
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew :patches:buildAndroid --no-daemon
-      - name: Verify bundle exists
+
+      - name: Check Morphe registry credentials
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$(find patches/build/libs -maxdepth 1 -type f -name '*.mpp' -print -quit)"
-      - name: Verify Morphe Android DEX payload
-        run: python3 .github/scripts/verify_mpp_dex.py patches/build/libs
-      - name: Generate SHA-256
+          if [[ -z "${GPR_USER:-}" || -z "${GPR_KEY:-}" ]]; then
+            echo "::error::Missing GPR_USER or GPR_KEY Actions secret. Add a GitHub classic PAT with read:packages access to MorpheApp/registry."
+            exit 1
+          fi
+
+      - name: Configure private Gradle registry credentials
         shell: bash
         run: |
-          cd patches/build/libs
-          sha256sum *.mpp > SHA256SUMS.txt
-      - name: Upload patch bundle artifact
+          set -euo pipefail
+          gradle_user_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
+          mkdir -p "$gradle_user_home"
+          umask 077
+          printf 'gpr.user=%s\ngpr.key=%s\n' "$GPR_USER" "$GPR_KEY" > "$gradle_user_home/gradle.properties"
+          chmod 600 "$gradle_user_home/gradle.properties"
+
+      - name: Validate required patch and runtime sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s patches/src/main/kotlin/app/braveimmersive/patches/shared/Constants.kt
+          test -s patches/src/main/kotlin/app/braveimmersive/patches/BraveImmersiveStatusBarPatch.kt
+          test -s patches/src/main/kotlin/app/braveimmersive/patches/BraveBetaImmersiveStatusBarPatch.kt
+          test -s extensions/extension/src/main/java/app/braveimmersive/extension/BraveImmersiveStatusBar.java
+          grep -q 'namespace = "app.braveimmersive.extension"' extensions/extension/build.gradle.kts
+          if grep -R -nE '0xFF[0-9A-Fa-f]{6}([.]toInt\(\))?' patches/src/main/kotlin; then
+            echo '::error::App icon color must be a 24-bit 0xRRGGBB value without alpha.'
+            exit 1
+          fi
+
+      - name: Clean previous outputs
+        run: ./gradlew clean --no-daemon --stacktrace
+
+      - name: Generate patch inventory from JVM patch definitions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew :patches:generatePatchesList --no-daemon --stacktrace -Pversion=0.0.0-build.${GITHUB_RUN_NUMBER}
+
+      # IMPORTANT: buildAndroid must be the final task that writes the .mpp.
+      # generatePatchesList depends on the JVM build and can leave a JVM-only MPP;
+      # Morphe Manager rejects that file because it contains no root classes.dex.
+      - name: Build installable Android bundle last
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew :patches:buildAndroid --no-daemon --stacktrace -Pversion=0.0.0-build.${GITHUB_RUN_NUMBER}
+
+      - name: Validate Android DEX, extension bridge, version and patch metadata
+        run: python3 .github/scripts/validate_mpp.py
+
+      - name: Upload only the validated installable bundle
         uses: actions/upload-artifact@v6
         with:
-          name: brave-immersive-statusbar-mpp
+          name: brave-immersive-statusbar-installable-mpp
           path: |
-            patches/build/libs/*.mpp
-            patches/build/libs/SHA256SUMS.txt
+            dist/*.mpp
+            dist/SHA256SUMS.txt
           if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish validated build to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}-${{ github.run_attempt }}
+          name: Build ${{ github.run_number }} (${{ github.sha }})
+          body: |
+            Automated Morphe patch build.
+
+            Bundle version: `0.0.0-build.${{ github.run_number }}`
+            Commit: `${{ github.sha }}`
+            Branch/ref: `${{ github.ref_name }}`
+
+            This prerelease contains only the validated installable `.mpp` bundle and its SHA-256 checksum.
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          files: |
+            dist/*.mpp
+            dist/SHA256SUMS.txt

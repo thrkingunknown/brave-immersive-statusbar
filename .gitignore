@@ -105,7 +105,7 @@ fabric.properties
 gradle-app.setting
 
 # Avoid ignoring Gradle wrapper jar file (.jar files are usually ignored)
-!gradle/wrapper/gradle-wrapper.jar
+!gradle-wrapper.jar
 
 # Cache of project
 .gradletasknamecache
@@ -128,3 +128,6 @@ node_modules/
 # Ignore IDEA files
 .idea/
 local.properties
+
+# CI-staged installable bundle and checksum
+/dist/

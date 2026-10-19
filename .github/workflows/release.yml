@@ -4,60 +4,89 @@ on:
   workflow_dispatch:
   push:
 
+permissions:
+  contents: write
+  packages: read
+  id-token: write
+  attestations: write
+
 jobs:
   release:
-    name: Release
-    permissions:
-      contents: write
-      packages: write
-      id-token: write
-      attestations: write
     runs-on: ubuntu-latest
+    env:
+      GPR_USER: ${{ secrets.GPR_USER }}
+      GPR_KEY: ${{ secrets.GPR_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Setup Java
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x ./gradlew
+
+      - name: Set up Java 21
         uses: actions/setup-java@v6
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '21'
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 'lts/*'
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Configure private Gradle registry credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GPR_USER:-}" || -z "${GPR_KEY:-}" ]]; then
+            echo "::error::Missing GPR_USER or GPR_KEY Actions secret. Add a GitHub classic PAT with read:packages access to MorpheApp/registry."
+            exit 1
+          fi
+          gradle_user_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
+          mkdir -p "$gradle_user_home"
+          umask 077
+          printf 'gpr.user=%s\ngpr.key=%s\n' "$GPR_USER" "$GPR_KEY" > "$gradle_user_home/gradle.properties"
+          chmod 600 "$gradle_user_home/gradle.properties"
+
+      - name: Install Node dependencies
         run: npm install
 
-      # semantic-release's Gradle plugin spawns ./gradlew directly.
-      # Ensure its executable bit survives regardless of source archive metadata.
-      - name: Ensure Gradle wrapper is executable
-        run: chmod +x ./gradlew
-
-      # Semantic release runs its own Gradle build command.
-      # Only dev and main branch will generate a release as specified by .releaserc
-      - name: Release
-        uses: cycjimmy/semantic-release-action@v6
+      # The exec prepare hook builds the JVM inventory first and writes the
+      # installable Android MPP last. No Gradle semantic-release publish task is
+      # allowed to overwrite that DEX-bearing artifact before GitHub uploads it.
+      - name: Run semantic release
         id: release
+        uses: cycjimmy/semantic-release-action@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Attest
+      - name: Attest release artifact
         if: steps.release.outputs.new_release_published == 'true'
         uses: actions/attest-build-provenance@v4
         with:
-          subject-name: 'Morphe Patches ${{ steps.release.outputs.new_release_git_tag }}'
-          subject-path: patches/build/libs/patches-*.mpp
+          subject-name: 'Brave Immersive Status Bar ${{ steps.release.outputs.new_release_git_tag }}'
+          subject-path: dist/patches-*.mpp
 
-      # Always verify compilation when semantic-release did not publish a release.
-      # This covers non-main/dev branches, chore commits, docs commits, etc.
-      - name: Verify project compiles
+      # No release on this branch/commit: still validate a fresh installable bundle.
+      - name: Clean previous outputs
+        if: steps.release.outputs.new_release_published != 'true'
+        run: ./gradlew clean --no-daemon --stacktrace
+
+      - name: Generate patch inventory for CI validation
         if: steps.release.outputs.new_release_published != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew :patches:buildAndroid clean --no-daemon
+        run: ./gradlew :patches:generatePatchesList --no-daemon --stacktrace -Pversion=0.0.0-ci.${GITHUB_RUN_NUMBER}
+
+      - name: Build Android bundle last for CI validation
+        if: steps.release.outputs.new_release_published != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew :patches:buildAndroid --no-daemon --stacktrace -Pversion=0.0.0-ci.${GITHUB_RUN_NUMBER}
+
+      - name: Validate CI Android bundle
+        if: steps.release.outputs.new_release_published != 'true'
+        run: python3 .github/scripts/validate_mpp.py
