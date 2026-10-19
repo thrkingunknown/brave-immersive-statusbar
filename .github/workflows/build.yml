@@ -52,24 +52,39 @@ jobs:
           missing = expected - actual
           if missing:
               sys.exit(f"ERROR: MPP is missing expected patches: {sorted(missing)}; found {sorted(actual)}")
-          bundles = list(Path("patches/build/libs").glob("*.mpp"))
+          libs = Path("patches/build/libs")
+          # Gradle also emits sources and javadoc archives with the .mpp suffix.
+          # Only the primary patch bundle is installable in Morphe Manager.
+          bundles = [p for p in libs.glob("*.mpp")
+                     if not p.name.endswith(("-sources.mpp", "-javadoc.mpp"))]
           if len(bundles) != 1:
-              sys.exit(f"ERROR: expected exactly one .mpp, found {len(bundles)}: {bundles}")
-          print(f"Validated {len(actual)} patch entries, version {version}, bundle {bundles[0]}")
+              all_bundles = sorted(str(p) for p in libs.glob("*.mpp"))
+              sys.exit(
+                  f"ERROR: expected exactly one installable .mpp, found {len(bundles)}; "
+                  f"all .mpp files: {all_bundles}"
+              )
+          bundle = bundles[0]
+          expected_bundle = f"patches-{version}.mpp"
+          if bundle.name != expected_bundle:
+              sys.exit(f"ERROR: expected primary bundle {expected_bundle!r}, found {bundle.name!r}")
+          print(f"Validated {len(actual)} patch entries, version {version}, bundle {bundle}")
           PY
 
       - name: Generate SHA-256
         shell: bash
         run: |
           cd patches/build/libs
-          sha256sum *.mpp > SHA256SUMS.txt
+          # Do not publish Gradle's auxiliary sources/javadoc archives as installable bundles.
+          bundle="patches-0.0.0-build.${GITHUB_RUN_NUMBER}.mpp"
+          test -f "$bundle"
+          sha256sum "$bundle" > SHA256SUMS.txt
 
       - name: Upload patch bundle artifact
         uses: actions/upload-artifact@v6
         with:
           name: brave-immersive-statusbar-mpp
           path: |
-            patches/build/libs/*.mpp
+            patches/build/libs/patches-0.0.0-build.${{ github.run_number }}.mpp
             patches/build/libs/SHA256SUMS.txt
           if-no-files-found: error
 
@@ -89,5 +104,5 @@ jobs:
           prerelease: true
           target_commitish: ${{ github.sha }}
           files: |
-            patches/build/libs/*.mpp
+            patches/build/libs/patches-0.0.0-build.${{ github.run_number }}.mpp
             patches/build/libs/SHA256SUMS.txt
