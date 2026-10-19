@@ -20,7 +20,7 @@ Experimental patch source for Brave on Android. When Chromium reports the top br
 Import the generated `.mpp` into Morphe as a local patch bundle. Do not import the source ZIP or a `-sources.mpp` / `-javadoc.mpp` file as a patch bundle.
 
 ## Behavior and limitations
-- Targets Chromium's current `onControlsOffsetChanged(int, int, boolean, int, int, boolean, boolean, boolean)` observer signature.
+- Matches Chromium's `CompositorViewHolder.onControlsOffsetChanged` by its stable class, method name, and void return type, so Brave releases can change trailing observer parameters without breaking the fingerprint. The injected callback relies on the first two parameters remaining integer top-controls offsets.
 - Tracks the resumed `ChromeTabbedActivity` and uses Android `WindowInsetsController` on API 30+, with immersive system-UI flags on older Android.
 - Does not force edge-to-edge layout globally, avoiding unintended Brave content-inset changes.
 - If either fingerprint fails on a particular Brave build, the patch cannot be applied to that APK.

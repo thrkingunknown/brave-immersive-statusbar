@@ -37,7 +37,9 @@ val braveImmersiveStatusBarPatch = bytecodePatch(
             definingClass = "Lorg/chromium/chrome/browser/compositor/CompositorViewHolder;",
             name = "onControlsOffsetChanged",
             returnType = "V",
-            parameters = listOf("I", "I", "Z", "I", "I", "Z", "Z", "Z"),
+            // Chromium/Brave changed this observer's trailing parameters in newer releases.
+            // Match by stable owner + method name + return type; the callback's first two
+            // arguments remain the top-controls offsets used by the extension.
         ).method.addInstructions(
             0,
             // In Chromium's 8-argument observer, p1 is topOffset and p2 is

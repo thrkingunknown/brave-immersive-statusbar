@@ -55,6 +55,10 @@ jobs:
           test -s patches/src/main/kotlin/app/braveimmersive/patches/BraveBetaImmersiveStatusBarPatch.kt
           test -s extensions/extension/src/main/java/app/braveimmersive/extension/BraveImmersiveStatusBar.java
           grep -q 'namespace = "app.braveimmersive.extension"' extensions/extension/build.gradle.kts
+          if grep -R -n 'parameters = listOf("I", "I", "Z", "I", "I", "Z", "Z", "Z")' patches/src/main/kotlin; then
+            echo '::error::Do not pin onControlsOffsetChanged to the old eight-parameter signature.'
+            exit 1
+          fi
           if grep -R -nE '0xFF[0-9A-Fa-f]{6}([.]toInt\(\))?' patches/src/main/kotlin; then
             echo '::error::App icon color must be a 24-bit 0xRRGGBB value without alpha.'
             exit 1
