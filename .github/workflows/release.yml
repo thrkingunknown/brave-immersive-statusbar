@@ -34,6 +34,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # semantic-release's Gradle plugin spawns ./gradlew directly.
+      # Ensure its executable bit survives regardless of source archive metadata.
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x ./gradlew
+
       # Semantic release runs its own Gradle build command.
       # Only dev and main branch will generate a release as specified by .releaserc
       - name: Release
