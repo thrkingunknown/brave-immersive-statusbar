@@ -6,10 +6,13 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -23,12 +26,8 @@ jobs:
       - name: Clean previous outputs
         run: ./gradlew clean --no-daemon
       - name: Build Morphe patch bundle
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew :patches:buildAndroid --no-daemon -Pversion=0.0.0-build.${{ github.run_number }}
       - name: Generate patch inventory
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew :patches:generatePatchesList --no-daemon -Pversion=0.0.0-build.${{ github.run_number }}
       - name: Validate inventory and installable bundle
         shell: bash
