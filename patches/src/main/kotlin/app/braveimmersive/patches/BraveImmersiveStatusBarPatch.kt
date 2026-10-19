@@ -15,33 +15,25 @@ private val currentActivityResumeFingerprint = Fingerprint(
     parameters = emptyList()
 )
 
-// Patch the concrete compositor observer because it overrides these callbacks rather
-// than inheriting the interface default implementations.
 private val controlsOffsetChangedFingerprint = Fingerprint(
-    definingClass = "Lorg/chromium/chrome/browser/compositor/CompositorViewHolder;",
+    definingClass = ":org/chromium/chrome/browser/",
     name = "onControlsOffsetChanged",
     returnType = "V",
     parameters = listOf("I", "I", "Z", "I", "I", "Z", "Z", "Z")
-)
-
-private val topControlsHeightChangedFingerprint = Fingerprint(
-    definingClass = "Lorg/chromium/chrome/browser/compositor/CompositorViewHolder;",
-    name = "onTopControlsHeightChanged",
-    returnType = "V",
-    parameters = listOf("I", "I")
 )
 
 @JvmField
 @Suppress("unused")
 val braveImmersiveStatusBarPatch = bytecodePatch(
     name = "Brave Immersive Status Bar",
-    description = "Hides the Android status bar when Brave's top browser controls are fully collapsed, and restores it as they reappear.",
+    description = "Hides Android's status bar when Brave's top browser controls are fully collapsed, and restores it when they reappear.",
     default = true
 ) {
     compatibleWith(BRAVE_COMPATIBILITY)
     extendWith("extensions/extension.mpe")
 
     execute {
+        // Keep a reference to the currently resumed tabbed-browser Activity.
         currentActivityResumeFingerprint.method.addInstructions(
             0,
             """
@@ -49,27 +41,24 @@ val braveImmersiveStatusBarPatch = bytecodePatch(
             """
         )
 
+        // Chromium's current BrowserControlsStateProvider.Observer callback has
+        // eight parameters. topOffset is p1; topControlsMinHeightOffset is p2.
+        // The status bar changes only at fully shown/fully collapsed thresholds.
         controlsOffsetChangedFingerprint.method.addInstructions(
             0,
             """
                 invoke-static {p1, p2}, $EXTENSION->onControlsOffsetChanged(II)V
             """
         )
-
-        topControlsHeightChangedFingerprint.method.addInstructions(
-            0,
-            """
-                invoke-static {p1, p2}, $EXTENSION->onTopControlsHeightChanged(II)V
-            """
-        )
     }
 }
+
 
 @JvmField
 @Suppress("unused")
 val braveBetaImmersiveStatusBarPatch = bytecodePatch(
     name = "Brave Beta Immersive Status Bar",
-    description = "Hides the Android status bar when Brave Beta's top browser controls are fully collapsed, and restores it as they reappear.",
+    description = "Hides Android's status bar when Brave Beta's top browser controls are fully collapsed, and restores it when they reappear.",
     default = true
 ) {
     compatibleWith(BRAVE_BETA_COMPATIBILITY)
@@ -82,18 +71,10 @@ val braveBetaImmersiveStatusBarPatch = bytecodePatch(
                 invoke-static {p0}, $EXTENSION->setCurrentActivity(Landroid/app/Activity;)V
             """
         )
-
         controlsOffsetChangedFingerprint.method.addInstructions(
             0,
             """
                 invoke-static {p1, p2}, $EXTENSION->onControlsOffsetChanged(II)V
-            """
-        )
-
-        topControlsHeightChangedFingerprint.method.addInstructions(
-            0,
-            """
-                invoke-static {p1, p2}, $EXTENSION->onTopControlsHeightChanged(II)V
             """
         )
     }

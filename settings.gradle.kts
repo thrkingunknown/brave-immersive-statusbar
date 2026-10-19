@@ -1,4 +1,4 @@
-rootProject.name = "brave-immersive-statusbar"
+rootProject.name = "morphe-patches-template"
 
 pluginManagement {
     repositories {

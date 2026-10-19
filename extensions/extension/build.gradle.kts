@@ -3,5 +3,5 @@ extension {
 }
 
 android {
-    namespace = "app.braveimmersive.extension"
+    namespace = "app.template.extension"
 }
