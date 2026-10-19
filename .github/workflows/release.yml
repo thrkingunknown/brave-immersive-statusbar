@@ -31,6 +31,18 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Configure private Gradle registry credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Morphe's setup reads Gradle properties gpr.user/gpr.key, not custom GPR_* env names.
+          # Keep credentials outside the checkout and restrict file permissions.
+          gradle_user_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
+          mkdir -p "$gradle_user_home"
+          umask 077
+          printf 'gpr.user=%s\ngpr.key=%s\n' "$GPR_USER" "$GPR_KEY" > "$gradle_user_home/gradle.properties"
+          chmod 600 "$gradle_user_home/gradle.properties"
+
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
@@ -74,5 +86,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          ./gradlew clean :patches:buildAndroid :patches:generatePatchesList --no-daemon -Pversion=0.0.0-check.${GITHUB_RUN_NUMBER}
+          ./gradlew clean :patches:buildAndroid :patches:generatePatchesList --no-daemon --stacktrace -Pversion=0.0.0-check.${GITHUB_RUN_NUMBER}
           python3 .github/scripts/validate_mpp.py

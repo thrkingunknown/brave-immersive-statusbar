@@ -39,6 +39,18 @@ jobs:
             exit 1
           fi
 
+      - name: Configure private Gradle registry credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Morphe's setup reads Gradle properties gpr.user/gpr.key, not custom GPR_* env names.
+          # Keep credentials outside the checkout and restrict file permissions.
+          gradle_user_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
+          mkdir -p "$gradle_user_home"
+          umask 077
+          printf 'gpr.user=%s\ngpr.key=%s\n' "$GPR_USER" "$GPR_KEY" > "$gradle_user_home/gradle.properties"
+          chmod 600 "$gradle_user_home/gradle.properties"
+
       - name: Verify runtime bridge source is present
         shell: bash
         run: |
@@ -49,17 +61,17 @@ jobs:
           }
 
       - name: Clean all previous outputs
-        run: ./gradlew clean --no-daemon
+        run: ./gradlew clean --no-daemon --stacktrace
 
       - name: Build installable Morphe bundle
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew :patches:buildAndroid --no-daemon -Pversion=0.0.0-build.${GITHUB_RUN_NUMBER}
+        run: ./gradlew :patches:buildAndroid --no-daemon --stacktrace -Pversion=0.0.0-build.${GITHUB_RUN_NUMBER}
 
       - name: Generate patch inventory
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew :patches:generatePatchesList --no-daemon -Pversion=0.0.0-build.${GITHUB_RUN_NUMBER}
+        run: ./gradlew :patches:generatePatchesList --no-daemon --stacktrace -Pversion=0.0.0-build.${GITHUB_RUN_NUMBER}
 
       - name: Validate bundle classes, version, and runtime DEX; stage only the installable file
         run: python3 .github/scripts/validate_mpp.py
