@@ -13,8 +13,6 @@ jobs:
       id-token: write
       attestations: write
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -56,10 +54,19 @@ jobs:
           subject-name: 'Morphe Patches ${{ steps.release.outputs.new_release_git_tag }}'
           subject-path: patches/build/libs/patches-*.mpp
 
+      # Verify released bundles as well: compile-time success alone does not ensure
+      # that the extension DEX and both discoverable patch classes are actually included.
+      - name: Validate released bundle contents
+        if: steps.release.outputs.new_release_published == 'true'
+        run: python3 .github/scripts/validate_mpp.py
+
       # Always verify compilation when semantic-release did not publish a release.
-      # This covers non-main/dev branches, chore commits, docs commits, etc.
-      - name: Verify project compiles
+      # Clean must run before buildAndroid, not after it (which would delete the result).
+      - name: Verify non-release build and bundle contents
         if: steps.release.outputs.new_release_published != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew :patches:buildAndroid clean --no-daemon
+        run: |
+          set -euo pipefail
+          ./gradlew clean :patches:buildAndroid :patches:generatePatchesList --no-daemon -Pversion=0.0.0-check.${GITHUB_RUN_NUMBER}
+          python3 .github/scripts/validate_mpp.py

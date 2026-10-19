@@ -1,14 +1,15 @@
 group = "app.braveimmersive"
+version = providers.gradleProperty("version").getOrElse("0.1.0")
 
 patches {
     // TODO: Update this section with your project details.
     about {
         name = "Brave Immersive Patches"
         description = "Experimental immersive status-bar patch for Brave on Android"
-        source = "https://github.com/"
-        author = "Community patch"
-        contact = "See repository issues"
-        website = "https://github.com/"
+        source = "https://github.com/thrkingunknown/brave-immersive-statusbar"
+        author = "thrkingunknown"
+        contact = "https://github.com/thrkingunknown/brave-immersive-statusbar/issues"
+        website = "https://github.com/thrkingunknown/brave-immersive-statusbar"
         license = "GPLv3"
     }
 }

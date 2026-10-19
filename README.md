@@ -29,3 +29,8 @@ Import the generated `.mpp` into Morphe as a local patch bundle. Do not import t
 
 ## License
 GPL-3.0-or-later. This is an independent patch and is not affiliated with the Morphe project.
+
+## Installing a CI build
+
+Download the single `patches-<version>.mpp` file from the **brave-immersive-statusbar-installable-mpp** Actions artifact or the matching GitHub prerelease. Do not import a `-sources.mpp` or `-javadoc.mpp` archive. The workflow now publishes only the installable bundle and validates that the bridge DEX and both patch classes are included.
+
