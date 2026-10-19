@@ -22,7 +22,8 @@ Import the generated `.mpp` into Morphe as a local patch bundle. Do not import t
 ## Behavior and limitations
 - For Brave Beta 1.99.46, the inspected APK exposes the controls-offset callback as `CompositorViewHolder.E(IIIIZZZZ)V`; the Beta patch first tries the source-level name, then falls back to that verified obfuscated signature. The first two callback parameters are injected as top-controls offsets. The Beta patch deliberately avoids the source-level height-change fingerprint because its obfuscated equivalent has not yet been positively identified, and uses the runtime bridge's density-based fallback threshold instead. Obfuscated method names can change in later builds, so other Beta versions still require APK-level verification.
 - Tracks the resumed `ChromeTabbedActivity` and uses Android `WindowInsetsController` on API 30+, with immersive system-UI flags on older Android.
-- Does not force edge-to-edge layout globally, avoiding unintended Brave content-inset changes.
+- When the status bar is hidden, enables edge-to-edge drawing with a transparent status-bar background and disabled decor fitting, so webpage content can occupy the former status-bar strip. When browser controls return, restores the initial inferred fitting mode, status-bar color, and layout flags.
+- This window-layout change is experimental. Validate scrolling, address-bar transitions, tab switching, rotation, fullscreen video, transient system-bar reveals, and return-to-app behavior on the exact Brave build.
 - If either fingerprint fails on a particular Brave build, the patch cannot be applied to that APK.
 - Transient system-bar reveal behavior may vary by Android version and OEM.
 

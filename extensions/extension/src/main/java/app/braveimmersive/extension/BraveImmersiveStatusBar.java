@@ -7,6 +7,7 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
+import android.graphics.Color;
 
 import java.lang.ref.WeakReference;
 
@@ -14,12 +15,18 @@ import java.lang.ref.WeakReference;
 public final class BraveImmersiveStatusBar {
     private static final Object LOCK = new Object();
     private static final int FULLSCREEN = View.SYSTEM_UI_FLAG_FULLSCREEN;
+    private static final int LAYOUT_FULLSCREEN = View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+    private static final int LAYOUT_STABLE = View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+    private static final int EDGE_TO_EDGE_FLAGS = LAYOUT_FULLSCREEN | LAYOUT_STABLE;
     private static final int FALLBACK_HIDE_DP = 48;
     private static final int FALLBACK_SHOW_DP = 8;
 
     private static WeakReference<Activity> activityRef = new WeakReference<>(null);
     private static boolean originalFullscreen;
     private static boolean originalStatusBarVisible = true;
+    private static boolean originalDecorFitsSystemWindows = true;
+    private static int originalDecorSystemUiVisibility;
+    private static int originalStatusBarColor;
     private static boolean capturedOriginal;
     private static int topControlsHeight = -1;
     private static int topControlsMinHeight;
@@ -44,7 +51,13 @@ public final class BraveImmersiveStatusBar {
                 if (window == null) return;
                 View decor = window.getDecorView();
                 if (!capturedOriginal) {
-                    originalFullscreen = (decor.getSystemUiVisibility() & FULLSCREEN) != 0;
+                    originalDecorSystemUiVisibility = decor.getSystemUiVisibility();
+                    originalFullscreen = (originalDecorSystemUiVisibility & FULLSCREEN) != 0;
+                    // Preserve Brave's pre-patch layout mode. Android has no public getter for
+                    // Window.getDecorFitsSystemWindows(), so infer it from the initial layout flag.
+                    originalDecorFitsSystemWindows =
+                            (originalDecorSystemUiVisibility & LAYOUT_FULLSCREEN) == 0;
+                    originalStatusBarColor = window.getStatusBarColor();
                     originalStatusBarVisible = !originalFullscreen;
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         WindowInsets insets = decor.getRootWindowInsets();
@@ -110,8 +123,24 @@ public final class BraveImmersiveStatusBar {
         Window window = activity.getWindow();
         if (window == null) return;
 
-        // On Android 11+, use the supported WindowInsetsController API. Legacy
-        // SYSTEM_UI_FLAG_FULLSCREEN alone may not reliably hide bars in edge-to-edge apps.
+        View decor = window.getDecorView();
+        if (hidden) {
+            // Hide-only leaves the web content laid out below the status-bar inset. Disable
+            // decor fitting and lay out behind a transparent status bar while controls collapse.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.setDecorFitsSystemWindows(false);
+            }
+            window.setStatusBarColor(Color.TRANSPARENT);
+            int layoutFlags = decor.getSystemUiVisibility() | EDGE_TO_EDGE_FLAGS;
+            if (layoutFlags != decor.getSystemUiVisibility()) {
+                decor.setSystemUiVisibility(layoutFlags);
+            }
+        } else {
+            restoreWindowLayout(window, decor);
+        }
+
+        // System-bar visibility and content layout are separate: WindowInsetsController hides
+        // the bar, while the layout changes above let the webpage occupy the released area.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             WindowInsetsController controller = window.getInsetsController();
             if (controller != null) {
@@ -126,22 +155,29 @@ public final class BraveImmersiveStatusBar {
             }
         }
 
-        View decor = window.getDecorView();
         int flags = decor.getSystemUiVisibility();
-        if (hidden || originalFullscreen) {
-            flags |= FULLSCREEN;
-        } else {
-            flags &= ~FULLSCREEN;
+        if (hidden || originalFullscreen) flags |= FULLSCREEN;
+        else flags &= ~FULLSCREEN;
+        if (flags != decor.getSystemUiVisibility()) decor.setSystemUiVisibility(flags);
+    }
+
+    /** Restore only the layout properties this patch changes, preserving Chromium's other flags. */
+    private static void restoreWindowLayout(Window window, View decor) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(originalDecorFitsSystemWindows);
         }
-        if (flags != decor.getSystemUiVisibility()) {
-            decor.setSystemUiVisibility(flags);
-        }
+        window.setStatusBarColor(originalStatusBarColor);
+        int flags = decor.getSystemUiVisibility();
+        flags = (flags & ~EDGE_TO_EDGE_FLAGS)
+                | (originalDecorSystemUiVisibility & EDGE_TO_EDGE_FLAGS);
+        if (flags != decor.getSystemUiVisibility()) decor.setSystemUiVisibility(flags);
     }
 
     private static void restorePrevious(Activity activity) {
         if (activity == null || !capturedOriginal) return;
         Window window = activity.getWindow();
         if (window == null) return;
+        restoreWindowLayout(window, window.getDecorView());
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             WindowInsetsController controller = window.getInsetsController();
