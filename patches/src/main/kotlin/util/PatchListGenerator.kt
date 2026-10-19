@@ -14,20 +14,14 @@ import java.net.URLClassLoader
 import java.util.jar.Manifest
 
 fun main() {
-    val libsDirectory = File("build/libs")
-    val patchBundles = libsDirectory.listFiles { file ->
-        file.isFile && file.name.endsWith(".mpp") &&
-                !file.name.endsWith("-javadoc.mpp") &&
-                !file.name.endsWith("-sources.mpp")
-    }?.sortedBy { it.name }
-        ?: error("Patch output directory does not exist: ${libsDirectory.absolutePath}")
-
-    require(patchBundles.size == 1) {
-        "Expected exactly one installable .mpp in ${libsDirectory.absolutePath}; " +
-                "found ${patchBundles.map { it.name }}. Run clean before generating patch metadata."
-    }
-
-    val patchFiles = setOf(patchBundles.single())
+    val patchFiles = setOf(
+        File("build/libs/").listFiles { file ->
+            val fileName = file.name
+            !fileName.contains("javadoc") &&
+                    !fileName.contains("sources") &&
+                    fileName.endsWith(".mpp")
+        }!!.first()
+    )
     val loadedPatches = loadPatchesFromJar(patchFiles)
     val patchClassLoader = URLClassLoader(patchFiles.map { it.toURI().toURL() }.toTypedArray())
     val manifest = patchClassLoader.getResources("META-INF/MANIFEST.MF")

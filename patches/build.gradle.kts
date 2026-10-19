@@ -1,15 +1,14 @@
 group = "app.braveimmersive"
-version = providers.gradleProperty("version").getOrElse("0.1.0")
 
 patches {
     // TODO: Update this section with your project details.
     about {
         name = "Brave Immersive Patches"
         description = "Experimental immersive status-bar patch for Brave on Android"
-        source = "https://github.com/thrkingunknown/brave-immersive-statusbar"
-        author = "thrkingunknown"
-        contact = "https://github.com/thrkingunknown/brave-immersive-statusbar/issues"
-        website = "https://github.com/thrkingunknown/brave-immersive-statusbar"
+        source = "https://github.com/"
+        author = "Community patch"
+        contact = "See repository issues"
+        website = "https://github.com/"
         license = "GPLv3"
     }
 }
@@ -23,6 +22,10 @@ dependencies {
     patchListGeneratorClasspath(libs.gson)
 }
 
+// Important: this generator reads the JVM .mpp so it can reflect over patch classes.
+// Release automation must run :patches:buildAndroid AFTER generatePatchesList; otherwise
+// the JVM-only .mpp can overwrite the Android bundle and Morphe Manager reports
+// "Patch bundle is missing dex entries".
 tasks {
     register<JavaExec>("generatePatchesList") {
         description = "Build patch with patch list"

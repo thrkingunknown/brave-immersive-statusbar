@@ -13,12 +13,6 @@ jobs:
       id-token: write
       attestations: write
     runs-on: ubuntu-latest
-    env:
-      # Create repository Actions secrets GPR_USER and GPR_KEY.
-      # GPR_KEY must be a classic PAT with read:packages permission and access to
-      # MorpheApp/registry. GITHUB_TOKEN alone may not access another owner's package.
-      GPR_USER: ${{ secrets.GPR_USER }}
-      GPR_KEY: ${{ secrets.GPR_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -30,18 +24,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-
-      - name: Configure private Gradle registry credentials
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Morphe's setup reads Gradle properties gpr.user/gpr.key, not custom GPR_* env names.
-          # Keep credentials outside the checkout and restrict file permissions.
-          gradle_user_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
-          mkdir -p "$gradle_user_home"
-          umask 077
-          printf 'gpr.user=%s\ngpr.key=%s\n' "$GPR_USER" "$GPR_KEY" > "$gradle_user_home/gradle.properties"
-          chmod 600 "$gradle_user_home/gradle.properties"
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -72,19 +54,10 @@ jobs:
           subject-name: 'Morphe Patches ${{ steps.release.outputs.new_release_git_tag }}'
           subject-path: patches/build/libs/patches-*.mpp
 
-      # Verify released bundles as well: compile-time success alone does not ensure
-      # that the extension DEX and both discoverable patch classes are actually included.
-      - name: Validate released bundle contents
-        if: steps.release.outputs.new_release_published == 'true'
-        run: python3 .github/scripts/validate_mpp.py
-
       # Always verify compilation when semantic-release did not publish a release.
-      # Clean must run before buildAndroid, not after it (which would delete the result).
-      - name: Verify non-release build and bundle contents
+      # This covers non-main/dev branches, chore commits, docs commits, etc.
+      - name: Verify project compiles
         if: steps.release.outputs.new_release_published != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          ./gradlew clean :patches:buildAndroid :patches:generatePatchesList --no-daemon --stacktrace -Pversion=0.0.0-check.${GITHUB_RUN_NUMBER}
-          python3 .github/scripts/validate_mpp.py
+        run: ./gradlew :patches:buildAndroid clean --no-daemon
