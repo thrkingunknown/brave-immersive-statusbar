@@ -51,6 +51,18 @@ jobs:
           printf 'gpr.user=%s\ngpr.key=%s\n' "$GPR_USER" "$GPR_KEY" > "$gradle_user_home/gradle.properties"
           chmod 600 "$gradle_user_home/gradle.properties"
 
+      - name: Verify compatibility metadata and runtime bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s patches/src/main/kotlin/app/braveimmersive/patches/shared/Constants.kt
+          test -s patches/src/main/kotlin/app/braveimmersive/patches/BraveImmersiveStatusBarPatch.kt
+          test -s patches/src/main/kotlin/app/braveimmersive/patches/BraveBetaImmersiveStatusBarPatch.kt
+          if grep -R -nE '0xFF[0-9A-Fa-f]{6}([.]toInt\(\))?' patches/src/main/kotlin; then
+            echo '::error::App icon colors must be 24-bit 0xRRGGBB, without an alpha byte.'
+            exit 1
+          fi
+
       - name: Verify runtime bridge source is present
         shell: bash
         run: |

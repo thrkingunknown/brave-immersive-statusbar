@@ -1,9 +1,12 @@
 package app.braveimmersive.extension;
 
 import android.app.Activity;
+import android.os.Build;
 import android.os.Looper;
 import android.view.View;
 import android.view.Window;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 
 import java.lang.ref.WeakReference;
 
@@ -16,6 +19,7 @@ public final class BraveImmersiveStatusBar {
 
     private static WeakReference<Activity> activityRef = new WeakReference<>(null);
     private static boolean originalFullscreen;
+    private static boolean originalStatusBarVisible = true;
     private static boolean capturedOriginal;
     private static int topControlsHeight = -1;
     private static int topControlsMinHeight;
@@ -41,6 +45,14 @@ public final class BraveImmersiveStatusBar {
                 View decor = window.getDecorView();
                 if (!capturedOriginal) {
                     originalFullscreen = (decor.getSystemUiVisibility() & FULLSCREEN) != 0;
+                    originalStatusBarVisible = !originalFullscreen;
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        WindowInsets insets = decor.getRootWindowInsets();
+                        if (insets != null) {
+                            originalStatusBarVisible =
+                                    insets.isVisible(WindowInsets.Type.statusBars());
+                        }
+                    }
                     capturedOriginal = true;
                 }
                 setHiddenInternal(activity, false);
@@ -70,7 +82,7 @@ public final class BraveImmersiveStatusBar {
                 final int showSlack = Math.max(hideSlack + 1, Math.round(4.0f * density));
                 final int height = topControlsHeight;
                 final int minHeight = height > 0
-                        ? Math.max(0, Math.min(minHeightOffset, height))
+                        ? Math.max(0, Math.min(topControlsMinHeight, height))
                         : topControlsMinHeight;
 
                 if (height > 0 && height > minHeight) {
@@ -97,22 +109,54 @@ public final class BraveImmersiveStatusBar {
     private static void setHiddenInternal(Activity activity, boolean hidden) {
         Window window = activity.getWindow();
         if (window == null) return;
+
+        // On Android 11+, use the supported WindowInsetsController API. Legacy
+        // SYSTEM_UI_FLAG_FULLSCREEN alone may not reliably hide bars in edge-to-edge apps.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                controller.setSystemBarsBehavior(
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                if (hidden || !originalStatusBarVisible) {
+                    controller.hide(WindowInsets.Type.statusBars());
+                } else {
+                    controller.show(WindowInsets.Type.statusBars());
+                }
+                return;
+            }
+        }
+
         View decor = window.getDecorView();
         int flags = decor.getSystemUiVisibility();
-        if (hidden) {
+        if (hidden || originalFullscreen) {
             flags |= FULLSCREEN;
-        } else if (!originalFullscreen) {
-            flags &= ~FULLSCREEN;
         } else {
-            flags |= FULLSCREEN;
+            flags &= ~FULLSCREEN;
         }
-        if (flags != decor.getSystemUiVisibility()) decor.setSystemUiVisibility(flags);
+        if (flags != decor.getSystemUiVisibility()) {
+            decor.setSystemUiVisibility(flags);
+        }
     }
 
     private static void restorePrevious(Activity activity) {
         if (activity == null || !capturedOriginal) return;
         Window window = activity.getWindow();
         if (window == null) return;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                controller.setSystemBarsBehavior(
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                if (originalStatusBarVisible) {
+                    controller.show(WindowInsets.Type.statusBars());
+                } else {
+                    controller.hide(WindowInsets.Type.statusBars());
+                }
+                return;
+            }
+        }
+
         View decor = window.getDecorView();
         int flags = decor.getSystemUiVisibility();
         if (originalFullscreen) flags |= FULLSCREEN;

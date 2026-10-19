@@ -2,19 +2,11 @@ package app.braveimmersive.patches
 
 import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.patch.ApkFileType
-import app.morphe.patcher.patch.AppTarget
-import app.morphe.patcher.patch.Compatibility
 import app.morphe.patcher.patch.bytecodePatch
+import app.braveimmersive.patches.shared.Constants.BRAVE_COMPATIBILITY
 
 private const val EXTENSION = "Lapp/braveimmersive/extension/BraveImmersiveStatusBar;"
 
-private fun braveCompatibility() = Compatibility(
-    name = "Brave",
-    packageName = "com.brave.browser",
-    apkFileType = ApkFileType.APK,
-    targets = listOf(AppTarget(version = null, isExperimental = true)),
-)
 
 @JvmField
 @Suppress("unused")
@@ -23,7 +15,7 @@ val braveImmersiveStatusBarPatch = bytecodePatch(
     description = "Hides the Android status bar when Brave's top browser controls are fully collapsed, and restores it as they reappear.",
     default = true,
 ) {
-    compatibleWith(braveCompatibility())
+    compatibleWith(BRAVE_COMPATIBILITY)
     extendWith("extensions/extension.mpe")
 
     // Keep Chromium fingerprints out of the patch class's static initializer. This ensures that
