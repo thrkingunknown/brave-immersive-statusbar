@@ -20,7 +20,7 @@ Experimental patch source for Brave on Android. When Chromium reports the top br
 Import the generated `.mpp` into Morphe as a local patch bundle. Do not import the source ZIP or a `-sources.mpp` / `-javadoc.mpp` file as a patch bundle.
 
 ## Behavior and limitations
-- Matches Chromium's `CompositorViewHolder.onControlsOffsetChanged` by its stable class, method name, and void return type, so Brave releases can change trailing observer parameters without breaking the fingerprint. The injected callback relies on the first two parameters remaining integer top-controls offsets.
+- For Brave Beta 1.99.46, the inspected APK exposes the controls-offset callback as `CompositorViewHolder.E(IIIIZZZZ)V`; the Beta patch first tries the source-level name, then falls back to that verified obfuscated signature. The first two callback parameters are injected as top-controls offsets. The Beta patch deliberately avoids the source-level height-change fingerprint because its obfuscated equivalent has not yet been positively identified, and uses the runtime bridge's density-based fallback threshold instead. Obfuscated method names can change in later builds, so other Beta versions still require APK-level verification.
 - Tracks the resumed `ChromeTabbedActivity` and uses Android `WindowInsetsController` on API 30+, with immersive system-UI flags on older Android.
 - Does not force edge-to-edge layout globally, avoiding unintended Brave content-inset changes.
 - If either fingerprint fails on a particular Brave build, the patch cannot be applied to that APK.

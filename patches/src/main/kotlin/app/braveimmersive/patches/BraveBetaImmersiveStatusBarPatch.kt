@@ -6,7 +6,8 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.braveimmersive.patches.shared.Constants.BRAVE_BETA_COMPATIBILITY
 
 private const val EXTENSION = "Lapp/braveimmersive/extension/BraveImmersiveStatusBar;"
-
+private const val COMPOSITOR_VIEW_HOLDER =
+    "Lorg/chromium/chrome/browser/compositor/CompositorViewHolder;"
 
 @JvmField
 @Suppress("unused")
@@ -18,8 +19,6 @@ val braveBetaImmersiveStatusBarPatch = bytecodePatch(
     compatibleWith(BRAVE_BETA_COMPATIBILITY)
     extendWith("extensions/extension.mpe")
 
-    // Same Chrome/Chromium callbacks as Brave stable, kept separate so a class-init failure in one
-    // definition cannot silently remove both patches from the bundle.
     execute {
         Fingerprint(
             definingClass = "Lorg/chromium/chrome/browser/ChromeTabbedActivity;",
@@ -33,30 +32,34 @@ val braveBetaImmersiveStatusBarPatch = bytecodePatch(
             """.trimIndent(),
         )
 
-        Fingerprint(
-            definingClass = "Lorg/chromium/chrome/browser/compositor/CompositorViewHolder;",
-            name = "onControlsOffsetChanged",
-            returnType = "V",
-            // Chromium/Brave changed this observer's trailing parameters in newer releases.
-            // Match by stable owner + method name + return type; the callback's first two
-            // arguments remain the top-controls offsets used by the extension.
-        ).method.addInstructions(
+        // Prefer the source-level method name when it is present. Brave Beta 1.99.46
+        // obfuscates this callback to E(IIIIZZZZ)V, so fall back to the exact signature
+        // confirmed in that APK rather than matching an arbitrary method by owner alone.
+        val controlsOffsetChangedMethod = runCatching {
+            Fingerprint(
+                definingClass = COMPOSITOR_VIEW_HOLDER,
+                name = "onControlsOffsetChanged",
+                returnType = "V",
+            ).method
+        }.getOrElse {
+            Fingerprint(
+                definingClass = COMPOSITOR_VIEW_HOLDER,
+                name = "E",
+                returnType = "V",
+                parameters = listOf("I", "I", "I", "I", "Z", "Z", "Z", "Z"),
+            ).method
+        }
+
+        controlsOffsetChangedMethod.addInstructions(
             0,
             """
                 invoke-static {p1, p2}, $EXTENSION->onControlsOffsetChanged(II)V
             """.trimIndent(),
         )
 
-        Fingerprint(
-            definingClass = "Lorg/chromium/chrome/browser/compositor/CompositorViewHolder;",
-            name = "onTopControlsHeightChanged",
-            returnType = "V",
-            parameters = listOf("I", "I"),
-        ).method.addInstructions(
-            0,
-            """
-                invoke-static {p1, p2}, $EXTENSION->onTopControlsHeightChanged(II)V
-            """.trimIndent(),
-        )
+        // The source-level onTopControlsHeightChanged name is absent from this minified class.
+        // It has multiple obfuscated (II)V methods, and their roles have not been established
+        // from the available disassembly. Do not inject into an unverified method; the extension
+        // uses its density-based fallback threshold when the height callback is unavailable.
     }
 }

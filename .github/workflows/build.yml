@@ -59,6 +59,13 @@ jobs:
             echo '::error::Do not pin onControlsOffsetChanged to the old eight-parameter signature.'
             exit 1
           fi
+          beta_patch=patches/src/main/kotlin/app/braveimmersive/patches/BraveBetaImmersiveStatusBarPatch.kt
+          grep -q 'name = "E"' "$beta_patch"
+          grep -q 'parameters = listOf("I", "I", "I", "I", "Z", "Z", "Z", "Z")' "$beta_patch"
+          if grep -q 'name = "onTopControlsHeightChanged"' "$beta_patch"; then
+            echo '::error::Do not target the unverified obfuscated top-controls-height callback on Brave Beta.'
+            exit 1
+          fi
           if grep -R -nE '0xFF[0-9A-Fa-f]{6}([.]toInt\(\))?' patches/src/main/kotlin; then
             echo '::error::App icon color must be a 24-bit 0xRRGGBB value without alpha.'
             exit 1
