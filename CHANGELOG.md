@@ -10,3 +10,9 @@
 - Apply transparent status-bar color and layout-fullscreen/stable flags; disable decor fitting on Android 11+.
 - Restore captured status-bar color and layout flags when controls return or the activity changes.
 - Requires on-device validation on Brave Beta 1.99.46 / Android 16.
+
+
+## 1.0.2
+- Temporarily toggle `WindowManager.LayoutParams.FLAG_FULLSCREEN` with toolbar collapse/expansion, while restoring the original window flag when the toolbar returns.
+- Keep the Beta-specific fingerprint and shared runtime behavior.
+- Experimental; requires build and on-device verification.

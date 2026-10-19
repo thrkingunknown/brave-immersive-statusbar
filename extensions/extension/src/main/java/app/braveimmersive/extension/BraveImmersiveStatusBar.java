@@ -7,6 +7,7 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
+import android.view.WindowManager;
 import android.graphics.Color;
 
 import java.lang.ref.WeakReference;
@@ -23,6 +24,7 @@ public final class BraveImmersiveStatusBar {
 
     private static WeakReference<Activity> activityRef = new WeakReference<>(null);
     private static boolean originalFullscreen;
+    private static boolean originalWindowFullscreen;
     private static boolean originalStatusBarVisible = true;
     private static boolean originalDecorFitsSystemWindows = true;
     private static int originalDecorSystemUiVisibility;
@@ -53,6 +55,8 @@ public final class BraveImmersiveStatusBar {
                 if (!capturedOriginal) {
                     originalDecorSystemUiVisibility = decor.getSystemUiVisibility();
                     originalFullscreen = (originalDecorSystemUiVisibility & FULLSCREEN) != 0;
+                    originalWindowFullscreen =
+                            (window.getAttributes().flags & WindowManager.LayoutParams.FLAG_FULLSCREEN) != 0;
                     // Preserve Brave's pre-patch layout mode. Android has no public getter for
                     // Window.getDecorFitsSystemWindows(), so infer it from the initial layout flag.
                     originalDecorFitsSystemWindows =
@@ -125,8 +129,12 @@ public final class BraveImmersiveStatusBar {
 
         View decor = window.getDecorView();
         if (hidden) {
-            // Hide-only leaves the web content laid out below the status-bar inset. Disable
-            // decor fitting and lay out behind a transparent status bar while controls collapse.
+            // Match the layout effect of android:windowFullscreen, but only while the toolbar
+            // is collapsed. This window flag is important because Chromium may cache/apply its
+            // top-inset layout differently from a visibility-only WindowInsetsController hide.
+            window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+
+            // Disable decor fitting and lay out behind a transparent status bar while controls collapse.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 window.setDecorFitsSystemWindows(false);
             }
@@ -135,6 +143,7 @@ public final class BraveImmersiveStatusBar {
             if (layoutFlags != decor.getSystemUiVisibility()) {
                 decor.setSystemUiVisibility(layoutFlags);
             }
+            decor.requestApplyInsets();
         } else {
             restoreWindowLayout(window, decor);
         }
@@ -163,6 +172,11 @@ public final class BraveImmersiveStatusBar {
 
     /** Restore only the layout properties this patch changes, preserving Chromium's other flags. */
     private static void restoreWindowLayout(Window window, View decor) {
+        if (originalWindowFullscreen) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.setDecorFitsSystemWindows(originalDecorFitsSystemWindows);
         }
@@ -171,6 +185,9 @@ public final class BraveImmersiveStatusBar {
         flags = (flags & ~EDGE_TO_EDGE_FLAGS)
                 | (originalDecorSystemUiVisibility & EDGE_TO_EDGE_FLAGS);
         if (flags != decor.getSystemUiVisibility()) decor.setSystemUiVisibility(flags);
+        // Window fullscreen/layout changes can otherwise leave Chromium holding its previous
+        // top-inset measurement until another unrelated layout pass.
+        decor.requestApplyInsets();
     }
 
     private static void restorePrevious(Activity activity) {

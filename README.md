@@ -43,3 +43,10 @@ GPL-3.0-or-later. This is an independent patch and is not affiliated with the Mo
 
 Download the single `patches-<version>.mpp` file from the **brave-immersive-statusbar-installable-mpp** Actions artifact or the matching GitHub prerelease. Do not import a `-sources.mpp` or `-javadoc.mpp` archive. The workflow publishes only a bundle whose root patch DEX, extension bridge DEX, package/version metadata, and both patch symbols pass validation.
 
+
+
+### Dynamic fullscreen layout (v1.0.2)
+
+When the browser toolbar is fully collapsed, the runtime temporarily applies `FLAG_FULLSCREEN` in addition to hiding the status bar and enabling fullscreen layout flags. This is intended to reproduce the content-layout behavior of a theme-level `android:windowFullscreen` setting only during the collapsed-toolbar state. When the toolbar returns, the original window fullscreen flag, decor fitting mode, status-bar color, and layout flags are restored.
+
+This is an experimental fix for Chromium/Brave builds where a visibility-only hide leaves a black top inset. It still needs to be built and validated on-device; it is not yet confirmed to eliminate the strip on every Brave version.
