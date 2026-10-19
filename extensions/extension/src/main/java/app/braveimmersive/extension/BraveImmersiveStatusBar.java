@@ -11,6 +11,9 @@ import android.view.WindowManager;
 import android.graphics.Color;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
+import java.util.Map;
 
 /** Runtime bridge called by the injected Brave bytecode. */
 public final class BraveImmersiveStatusBar {
@@ -18,6 +21,11 @@ public final class BraveImmersiveStatusBar {
     private static final int FULLSCREEN = View.SYSTEM_UI_FLAG_FULLSCREEN;
     private static final int LAYOUT_FULLSCREEN = View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
     private static final int LAYOUT_STABLE = View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+    private static final int IMMERSIVE_STICKY = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+    // Chromium's compositor uses these legacy flags when deciding whether to recompute
+    // the top-controls viewport. WindowInsetsController visibility alone is insufficient.
+    private static final int CHROMIUM_FULLSCREEN_FLAGS = FULLSCREEN | LAYOUT_FULLSCREEN
+            | LAYOUT_STABLE | IMMERSIVE_STICKY;
     private static final int EDGE_TO_EDGE_FLAGS = LAYOUT_FULLSCREEN | LAYOUT_STABLE;
     private static final int FALLBACK_HIDE_DP = 48;
     private static final int FALLBACK_SHOW_DP = 8;
@@ -30,6 +38,8 @@ public final class BraveImmersiveStatusBar {
     private static int originalDecorSystemUiVisibility;
     private static int originalStatusBarColor;
     private static boolean capturedOriginal;
+    private static boolean currentlyHidden;
+    private static final Map<View, Integer> originalViewFlags = new IdentityHashMap<>();
     private static int topControlsHeight = -1;
     private static int topControlsMinHeight;
 
@@ -45,6 +55,8 @@ public final class BraveImmersiveStatusBar {
                     restorePrevious(previous);
                     activityRef = new WeakReference<>(activity);
                     capturedOriginal = false;
+                    currentlyHidden = false;
+                    originalViewFlags.clear();
                     topControlsHeight = -1;
                     topControlsMinHeight = 0;
                 }
@@ -124,6 +136,7 @@ public final class BraveImmersiveStatusBar {
     }
 
     private static void setHiddenInternal(Activity activity, boolean hidden) {
+        if (hidden == currentlyHidden) return;
         Window window = activity.getWindow();
         if (window == null) return;
 
@@ -134,17 +147,19 @@ public final class BraveImmersiveStatusBar {
             // top-inset layout differently from a visibility-only WindowInsetsController hide.
             window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
-            // Disable decor fitting and lay out behind a transparent status bar while controls collapse.
+            // Chromium also reads legacy fullscreen flags from its view hierarchy to
+            // decide when to recalculate the compositor viewport. Set the flags on the
+            // decor, content root, CompositorViewHolder, and its ancestors—not just the
+            // WindowInsetsController—so the web contents can extend into the top inset.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 window.setDecorFitsSystemWindows(false);
             }
             window.setStatusBarColor(Color.TRANSPARENT);
-            int layoutFlags = decor.getSystemUiVisibility() | EDGE_TO_EDGE_FLAGS;
-            if (layoutFlags != decor.getSystemUiVisibility()) {
-                decor.setSystemUiVisibility(layoutFlags);
-            }
+            applyChromiumFullscreenFlags(window, decor);
             decor.requestApplyInsets();
+            decor.requestLayout();
         } else {
+            restoreChromiumFullscreenFlags(decor);
             restoreWindowLayout(window, decor);
         }
 
@@ -160,6 +175,7 @@ public final class BraveImmersiveStatusBar {
                 } else {
                     controller.show(WindowInsets.Type.statusBars());
                 }
+                currentlyHidden = hidden;
                 return;
             }
         }
@@ -168,6 +184,58 @@ public final class BraveImmersiveStatusBar {
         if (hidden || originalFullscreen) flags |= FULLSCREEN;
         else flags &= ~FULLSCREEN;
         if (flags != decor.getSystemUiVisibility()) decor.setSystemUiVisibility(flags);
+        currentlyHidden = hidden;
+    }
+
+    /** Apply the flags Chromium uses for fullscreen viewport updates to the relevant hierarchy. */
+    private static void applyChromiumFullscreenFlags(Window window, View decor) {
+        originalViewFlags.clear();
+        ArrayList<View> targets = new ArrayList<>();
+        targets.add(decor);
+        View content = window.findViewById(android.R.id.content);
+        if (content != null && content != decor) targets.add(content);
+        collectCompositorAncestors(content != null ? content : decor, targets);
+        for (View view : targets) {
+            if (view == null) continue;
+            originalViewFlags.put(view, view.getSystemUiVisibility() & CHROMIUM_FULLSCREEN_FLAGS);
+            int current = view.getSystemUiVisibility();
+            int updated = current | CHROMIUM_FULLSCREEN_FLAGS;
+            if (updated != current) view.setSystemUiVisibility(updated);
+            view.requestLayout();
+        }
+    }
+
+    /** Find Chromium's compositor and include its parent chain through the content root. */
+    private static boolean collectCompositorAncestors(View view, ArrayList<View> targets) {
+        if (!(view instanceof android.view.ViewGroup)) return false;
+        android.view.ViewGroup group = (android.view.ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            boolean found = child.getClass().getName().contains("CompositorViewHolder");
+            if (!found) found = collectCompositorAncestors(child, targets);
+            if (found) {
+                if (!targets.contains(child)) targets.add(child);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Restore only fullscreen-related bits, preserving unrelated flags changed by Chromium. */
+    private static void restoreChromiumFullscreenFlags(View decor) {
+        for (Map.Entry<View, Integer> entry : originalViewFlags.entrySet()) {
+            View view = entry.getKey();
+            if (view == null) continue;
+            int current = view.getSystemUiVisibility();
+            int restored = (current & ~CHROMIUM_FULLSCREEN_FLAGS) | entry.getValue();
+            if (restored != current) view.setSystemUiVisibility(restored);
+            view.requestLayout();
+        }
+        originalViewFlags.clear();
+        if (decor != null) {
+            decor.requestApplyInsets();
+            decor.requestLayout();
+        }
     }
 
     /** Restore only the layout properties this patch changes, preserving Chromium's other flags. */
@@ -194,7 +262,9 @@ public final class BraveImmersiveStatusBar {
         if (activity == null || !capturedOriginal) return;
         Window window = activity.getWindow();
         if (window == null) return;
+        restoreChromiumFullscreenFlags(window.getDecorView());
         restoreWindowLayout(window, window.getDecorView());
+        currentlyHidden = false;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             WindowInsetsController controller = window.getInsetsController();

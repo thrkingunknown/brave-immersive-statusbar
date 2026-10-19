@@ -16,3 +16,10 @@
 - Temporarily toggle `WindowManager.LayoutParams.FLAG_FULLSCREEN` with toolbar collapse/expansion, while restoring the original window flag when the toolbar returns.
 - Keep the Beta-specific fingerprint and shared runtime behavior.
 - Experimental; requires build and on-device verification.
+
+
+## 1.0.3 — Chromium view-hierarchy fullscreen flags
+- When top controls collapse, apply `FULLSCREEN`, `LAYOUT_FULLSCREEN`, `LAYOUT_STABLE`, and `IMMERSIVE_STICKY` to the decor/content hierarchy and the `CompositorViewHolder` plus its ancestor chain.
+- Snapshot and restore only the affected system-UI bits when controls return, preserving unrelated flags and avoiding repeated snapshots during collapsed scrolling.
+- Request layout and inset dispatch during both transitions so Chromium can recalculate the visible viewport.
+- Experimental source change; compilation and on-device behavior still require validation.

@@ -50,3 +50,8 @@ Download the single `patches-<version>.mpp` file from the **brave-immersive-stat
 When the browser toolbar is fully collapsed, the runtime temporarily applies `FLAG_FULLSCREEN` in addition to hiding the status bar and enabling fullscreen layout flags. This is intended to reproduce the content-layout behavior of a theme-level `android:windowFullscreen` setting only during the collapsed-toolbar state. When the toolbar returns, the original window fullscreen flag, decor fitting mode, status-bar color, and layout flags are restored.
 
 This is an experimental fix for Chromium/Brave builds where a visibility-only hide leaves a black top inset. It still needs to be built and validated on-device; it is not yet confirmed to eliminate the strip on every Brave version.
+
+
+### Chromium view-hierarchy fullscreen flags (v1.0.3)
+
+In addition to toggling `FLAG_FULLSCREEN` and the window insets, the runtime now applies the legacy fullscreen/layout/immersive flags to the decor view, content root, and the `CompositorViewHolder` and its ancestor chain. This targets Chromium's view-level fullscreen detection, which may not react to `WindowInsetsController` visibility changes alone. The patch snapshots the affected bits only on the hidden transition and restores them when controls return, while preserving unrelated flags. Layout and inset dispatch are requested on both transitions. This is a hypothesis-driven fix and must be built and tested on Brave Beta 1.99.46 / Android 16 before being considered confirmed.
